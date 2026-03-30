@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ahmed Store | متجر أحمد</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Cairo', sans-serif; background-color: #F9F9F7; color: #333; height: 100vh; overflow: hidden; }
+        .splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; justify-content: center; align-items: center; z-index: 1000; animation: fadeOut 2.5s forwards; }
+        .splash h1 { font-size: 2.5rem; color: #1a1a1a; }
+        @keyframes fadeOut { 0%, 70% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
+        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; opacity: 0; animation: fadeIn 1s ease-in 2.5s forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .header-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 30px; color: #1a1a1a; }
+        .menu-grid { width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; }
+        .glass-btn { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.6); padding: 20px; border-radius: 20px; text-decoration: none; color: #1a1a1a; font-weight: 600; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); transition: 0.3s; }
+        .glass-btn:active { transform: scale(0.96); }
+        .footer-credit { position: fixed; bottom: 15px; font-size: 0.7rem; opacity: 0.5; text-align: center; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="splash"><h1>مرحباً بكم في جوالي</h1></div>
+    <div class="container">
+        <h2 class="header-title">اختر القسم</h2>
+        <div class="menu-grid">
+            <a href="phones.html" class="glass-btn"><span>هواتف</span><i class="fas fa-chevron-left"></i></a>
+            <a href="smart_devices.html" class="glass-btn"><span>أجهزة ذكية</span><i class="fas fa-chevron-left"></i></a>
+            <a href="accessories.html" class="glass-btn"><span>اكسسوارات</span><i class="fas fa-chevron-left"></i></a>
+        </div>
+    </div>
+    <div class="footer-credit">موقع تجريبي - مطور الموقع أحمد غنيم</div>
+</body>
+</html>
