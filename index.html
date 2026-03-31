@@ -7,35 +7,58 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body { font-family: 'Cairo', sans-serif; background-color: #F9F9F7; color: #333; height: 100vh; overflow: hidden; }
+        /* تعريف الألوان للوضعين الفاتح والداكن */
+        :root {
+            --bg-color: #F9F9F7;
+            --text-color: #1a1a1a;
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --border-color: rgba(255, 255, 255, 0.8);
+            --shadow-blur: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode {
+            --bg-color: #1a1a1a; /* رمادي غامق للهواتف */
+            --text-color: #f1f1f1;
+            --card-bg: rgba(45, 45, 45, 0.8);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --shadow-blur: rgba(0, 0, 0, 0.6);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; transition: all 0.3s ease; }
+        body { font-family: 'Cairo', sans-serif; background-color: var(--bg-color); color: var(--text-color); height: 100vh; overflow: hidden; }
         
         /* 1. تصغير حجم كلمة الترحيب */
         .splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; justify-content: center; align-items: center; z-index: 1000; animation: fadeOut 2.5s forwards; }
         .splash h1 { font-size: 1.4rem; color: #1a1a1a; font-weight: 600; } 
-        
         @keyframes fadeOut { 0%, 70% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
         
         .container { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; opacity: 0; animation: fadeIn 1s ease-in 2.5s forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* 2. إضافة زر الإعدادات في الأعلى على الشمال */
-        .settings-link { 
-            position: absolute; 
-            top: 20px; 
-            left: 20px; 
-            color: #1a1a1a; 
-            font-size: 1.3rem; 
-            text-decoration: none; 
-            z-index: 100;
-        }
+        /* زر الإعدادات */
+        .settings-container { position: absolute; top: 20px; left: 20px; z-index: 100; }
+        .settings-link { color: var(--text-color); font-size: 1.5rem; cursor: pointer; display: inline-block; }
+        .settings-link.rotate { transform: rotate(90deg); }
 
-        /* 3. استبدال العنوان بـ "جوالي" وعلامة التوثيق */
-        .header-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 30px; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
-        .verify-icon { color: #007bff; font-size: 1.2rem; }
+        /* القائمة المنسدلة مع الضبابية والظل */
+        .dropdown-menu { 
+            position: absolute; top: 45px; left: 0; background: var(--card-bg); 
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color); border-radius: 15px; 
+            width: 210px; padding: 10px; 
+            box-shadow: 0 20px 40px var(--shadow-blur); /* ضبابية تحت المربع */
+            display: none; flex-direction: column; gap: 5px; opacity: 0; transform: translateY(-10px);
+        }
+        .dropdown-menu.show { display: flex; opacity: 1; transform: translateY(0); }
+        .dropdown-item { padding: 12px; font-size: 0.9rem; color: var(--text-color); text-decoration: none; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-radius: 10px; }
+        .dropdown-item:active { background: rgba(0,0,0,0.05); }
+
+        /* 2. عنوان "جوالي" وعلامة التوثيق */
+        .header-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 30px; display: flex; align-items: center; gap: 8px; }
+        .verify-icon { color: #1DA1F2; font-size: 1.2rem; }
 
         .menu-grid { width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; }
-        .glass-btn { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.6); padding: 20px; border-radius: 20px; text-decoration: none; color: #1a1a1a; font-weight: 600; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); transition: 0.3s; }
+        .glass-btn { background: var(--card-bg); backdrop-filter: blur(10px); border: 1px solid var(--border-color); padding: 20px; border-radius: 20px; text-decoration: none; color: var(--text-color); font-weight: 600; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .glass-btn:active { transform: scale(0.96); }
         
         .footer-credit { position: fixed; bottom: 15px; font-size: 0.7rem; opacity: 0.5; text-align: center; width: 100%; }
@@ -45,14 +68,22 @@
     <div class="splash"><h1>مرحباً بكم في جوالي</h1></div>
 
     <div class="container">
-        <a href="settings.html" class="settings-link">
-            <i class="fas fa-cog"></i>
-        </a>
+        <div class="settings-container">
+            <div class="settings-link" id="settingsBtn"><i class="fas fa-cog"></i></div>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-item" onclick="window.location.href='https://wa.me/your-number'">
+                    <span>خدمة العملاء</span> <i class="fas fa-headset"></i>
+                </div>
+                <div class="dropdown-item" id="darkModeToggle">
+                    <span>الوضع الداكن</span> <i class="fas fa-moon"></i>
+                </div>
+                <div class="dropdown-item" onclick="alert('سياسة الإرجاع: 14 يوم')">
+                    <span>سياسة الإرجاع</span> <i class="fas fa-undo"></i>
+                </div>
+            </div>
+        </div>
 
-        <h2 class="header-title">
-            جوالي
-            <i class="fas fa-check-circle verify-icon"></i>
-        </h2>
+        <h2 class="header-title">جوالي <i class="fas fa-check-circle verify-icon"></i></h2>
 
         <div class="menu-grid">
             <a href="phones.html" class="glass-btn"><span>هواتف</span><i class="fas fa-chevron-left"></i></a>
@@ -61,5 +92,29 @@
         </div>
     </div>
     <div class="footer-credit">موقع تجريبي - مطور الموقع أحمد غنيم</div>
+
+    <script>
+        const btn = document.getElementById('settingsBtn');
+        const menu = document.getElementById('dropdownMenu');
+        const darkToggle = document.getElementById('darkModeToggle');
+
+        // لف الترس وفتح القائمة
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            btn.classList.toggle('rotate');
+            menu.classList.toggle('show');
+        };
+
+        // إغلاق عند الضغط بالخارج
+        document.onclick = () => {
+            menu.classList.remove('show');
+            btn.classList.remove('rotate');
+        };
+
+        // تفعيل الوضع الداكن
+        darkToggle.onclick = () => {
+            document.body.classList.toggle('dark-mode');
+        };
+    </script>
 </body>
 </html>
