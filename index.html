@@ -10,22 +10,29 @@
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Cairo', sans-serif; background-color: #F9F9F7; color: #333; height: 100vh; overflow: hidden; }
         
-        /* شاشة الترحيب - تصغير الخط */
+        /* 1. تصغير حجم كلمة الترحيب */
         .splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; justify-content: center; align-items: center; z-index: 1000; animation: fadeOut 2.5s forwards; }
-        .splash h1 { font-size: 1.8rem; color: #1a1a1a; font-weight: 600; } 
+        .splash h1 { font-size: 1.4rem; color: #1a1a1a; font-weight: 600; } 
         
         @keyframes fadeOut { 0%, 70% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
         
         .container { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; opacity: 0; animation: fadeIn 1s ease-in 2.5s forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* زر الإعدادات في الأعلى يسار */
-        .settings-link { position: absolute; top: 25px; left: 25px; color: #1a1a1a; font-size: 1.4rem; text-decoration: none; transition: 0.3s; }
-        .settings-link:active { transform: rotate(90deg); }
+        /* 2. إضافة زر الإعدادات في الأعلى على الشمال */
+        .settings-link { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            color: #1a1a1a; 
+            font-size: 1.3rem; 
+            text-decoration: none; 
+            z-index: 100;
+        }
 
-        /* العنوان الجديد مع علامة التوثيق */
+        /* 3. استبدال العنوان بـ "جوالي" وعلامة التوثيق */
         .header-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 30px; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
-        .verify-icon { color: #1DA1F2; font-size: 1.3rem; }
+        .verify-icon { color: #007bff; font-size: 1.2rem; }
 
         .menu-grid { width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; }
         .glass-btn { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.6); padding: 20px; border-radius: 20px; text-decoration: none; color: #1a1a1a; font-weight: 600; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); transition: 0.3s; }
@@ -53,7 +60,6 @@
             <a href="accessories.html" class="glass-btn"><span>اكسسوارات</span><i class="fas fa-chevron-left"></i></a>
         </div>
     </div>
-
     <div class="footer-credit">موقع تجريبي - مطور الموقع أحمد غنيم</div>
 </body>
 </html>
