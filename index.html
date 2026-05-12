@@ -1,6 +1,197 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      p.timestamp = message.timestamp;
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
@@ -34,6 +225,7 @@
             overflow: hidden;
         }
 
+        /* رأس الواجهة (الزجاجي الاحترافي) */
         .dash-header {
             margin: 25px 25px 10px 25px;
             background: linear-gradient(135deg, rgba(0, 122, 255, 0.08) 0%, rgba(0, 122, 255, 0.02) 100%);
@@ -44,6 +236,7 @@
             padding: 20px 15px;
             text-align: center;
             box-shadow: 0 8px 25px rgba(0, 122, 255, 0.05), inset 0 0 15px rgba(255, 255, 255, 0.9);
+            position: relative;
         }
         .dash-header h2 {
             margin: 0;
@@ -59,8 +252,11 @@
             font-weight: 600;
         }
         
-        .dash-body { padding: 15px 30px 30px 30px; }
+        .dash-body {
+            padding: 15px 30px 30px 30px;
+        }
 
+        /* البطاقات والأقسام */
         .section-card {
             background: #fcfcfd;
             border: 1px solid #eef2f5;
@@ -82,6 +278,7 @@
         }
         .section-title i { color: #007AFF; }
 
+        /* ألوان الحقول المريحة للعين */
         .dash-group { margin-bottom: 15px; text-align: right; }
         .dash-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #4a5568; font-size: 0.9rem; }
         .dash-group input, .dash-group select { 
@@ -89,7 +286,9 @@
             border: 2px solid #e2e8f0; 
             border-radius: 10px; font-family: 'Cairo'; outline: none; 
             transition: all 0.3s; box-sizing: border-box; 
-            background: #ffffff; font-size: 0.95rem; color: #2d3748;
+            background: #ffffff;
+            font-size: 0.95rem;
+            color: #2d3748;
         }
         .dash-group input:focus, .dash-group select:focus { 
             border-color: #007AFF; 
@@ -99,11 +298,23 @@
         
         .theme-select { cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 15px center; }
         
+        /* قسم المميزات */
         .features-container {
-            display: flex; justify-content: space-between; align-items: flex-start;
-            margin-bottom: 25px; background: #ffffff; border-radius: 12px; padding: 15px 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 15px 5px;
         }
-        .feature-box { display: flex; flex-direction: column; align-items: center; text-align: center; width: 32%; }
+        .feature-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 32%;
+        }
         .feature-box i {
             font-size: 1.2rem; width: 40px; height: 40px; border-radius: 10px; display: flex; justify-content: center; align-items: center; margin-bottom: 8px; transition: transform 0.3s ease;
         }
@@ -111,22 +322,36 @@
         .feature-box span { font-size: 0.8rem; font-family: 'Cairo', sans-serif; color: #2d3748; font-weight: 700; }
         .feature-box p { font-size: 0.65rem; color: #718096; margin-top: 2px; margin-bottom: 0; font-weight: 600; }
 
+        /* ستايل زر الإنشاء - زجاجي (Glassmorphism) */
         .dash-btn { 
-            width: 100%; max-width: 220px; margin-left: auto; margin-right: auto;
-            padding: 12px; background: rgba(0, 122, 255, 0.1); 
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            color: #007AFF; font-size: 0.95rem; font-family: 'Cairo', sans-serif; font-weight: 800; 
-            border: 1px solid rgba(0, 122, 255, 0.2); border-radius: 20px; cursor: pointer; 
+            width: 100%; 
+            max-width: 220px; 
+            margin: 0 auto; 
+            padding: 12px; 
+            background: rgba(0, 122, 255, 0.1); 
+            backdrop-filter: blur(15px); 
+            -webkit-backdrop-filter: blur(15px);
+            color: #007AFF; 
+            font-size: 0.95rem; 
+            font-family: 'Cairo', sans-serif; 
+            font-weight: 800; 
+            border: 1px solid rgba(0, 122, 255, 0.2); 
+            border-radius: 20px; 
+            cursor: pointer; 
             transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); 
             box-shadow: 0 8px 25px rgba(0, 122, 255, 0.1); 
             display: flex; justify-content: center; align-items: center; gap: 8px;
         }
         .dash-btn:hover:not(:disabled) { 
-            background: rgba(0, 122, 255, 0.2); transform: scale(0.96); box-shadow: 0 4px 15px rgba(0, 122, 255, 0.15); 
+            background: rgba(0, 122, 255, 0.2); 
+            transform: scale(0.96); 
+            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.15); 
         }
         .dash-btn:disabled { 
-            background: rgba(160, 174, 192, 0.1); color: #a0aec0;
-            border-color: rgba(160, 174, 192, 0.2); cursor: not-allowed; box-shadow: none; transform: none; 
+            background: rgba(160, 174, 192, 0.1); 
+            color: #a0aec0;
+            border-color: rgba(160, 174, 192, 0.2);
+            cursor: not-allowed; box-shadow: none; transform: none; 
         }
 
         .dash-result { margin-top: 25px; padding: 20px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; display: none; text-align: center; animation: slideDown 0.5s ease-out; }
@@ -149,6 +374,8 @@
             color: #ea4335; font-size: 1.2rem; text-decoration: none; transition: all 0.3s ease; margin-bottom: 10px; 
         }
         .contact-email:hover { background: #ea4335; color: white; border-color: #ea4335; transform: translateY(-3px); box-shadow: 0 4px 12px rgba(234, 67, 53, 0.2); }
+        
+        /* حقوق الملكية في الواجهة الرئيسية */
         .dash-copyright { font-size: 0.6rem; color: #a0aec0; font-weight: 600; letter-spacing: 0.5px; margin-top: 10px; font-family: 'Cairo', sans-serif;}
 
         /* =========================================================
@@ -167,38 +394,41 @@
             --btn-bg: rgba(255, 255, 255, 0.07); --panel-bg: rgba(0, 30, 80, 0.95); --shadow-color: rgba(0, 0, 0, 0.5); --border-color: rgba(255, 255, 255, 0.15);
         }
         body.theme-white {
-            --bg-gradient: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); --text-color: #111111;
-            --btn-bg: rgba(0, 0, 0, 0.03); --panel-bg: rgba(249, 250, 251, 0.98); --shadow-color: rgba(0, 0, 0, 0.08); --border-color: rgba(0, 0, 0, 0.08);
+            --bg-gradient: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); --text-color: #111111;
+            --btn-bg: rgba(0, 0, 0, 0.05); --panel-bg: rgba(255, 255, 255, 0.98); --shadow-color: rgba(0, 0, 0, 0.1); --border-color: rgba(0, 0, 0, 0.1);
         }
-        body.theme-white .fa-tiktok { color: #000000; text-shadow: -1px -1px 0 #69C9D0, 1px 1px 0 #EE1D52; }
+        body.theme-white .fa-tiktok { color: #000000 !important; text-shadow: none; }
         body.theme-offwhite {
-            --bg-gradient: linear-gradient(135deg, #f5f3ed 0%, #e8e4db 100%); --text-color: #2a0202; 
-            --btn-bg: rgba(0, 0, 0, 0.03); --panel-bg: rgba(245, 243, 237, 0.98); --shadow-color: rgba(0, 0, 0, 0.1); --border-color: rgba(0, 0, 0, 0.05);
+            --bg-gradient: linear-gradient(135deg, #edeae0 0%, #e0dcd0 100%); --text-color: #2a0202; 
+            --btn-bg: rgba(0, 0, 0, 0.05); --panel-bg: rgba(237, 234, 224, 0.98); --shadow-color: rgba(0, 0, 0, 0.12); --border-color: rgba(0, 0, 0, 0.06);
         }
-        body.theme-offwhite .fa-tiktok { color: #000000; text-shadow: -1px -1px 0 #69C9D0, 1px 1px 0 #EE1D52; }
+        body.theme-offwhite .fa-tiktok { color: #000000 !important; text-shadow: none; }
         body.theme-peach {
-            --bg-gradient: linear-gradient(135deg, #FFF5F5 0%, #FFF0F0 100%); 
-            --text-color: #4a2020; 
-            --btn-bg: rgba(255, 220, 220, 0.5); 
-            --panel-bg: rgba(255, 245, 245, 0.98); 
-            --shadow-color: rgba(180, 120, 120, 0.12); 
-            --border-color: rgba(255, 200, 200, 0.3);
+            --bg-gradient: linear-gradient(135deg, #FFF8F8 0%, #FFE4E1 100%); 
+            --text-color: #000000; 
+            --btn-bg: #FADADD; 
+            --panel-bg: rgba(255, 240, 245, 0.98); 
+            --shadow-color: rgba(218, 165, 32, 0.15); 
+            --border-color: rgba(255, 182, 193, 0.4);
         }
-        body.theme-peach .fa-tiktok { color: #000000; text-shadow: -1px -1px 0 #69C9D0, 1px 1px 0 #EE1D52; }
+        body.theme-peach .fa-tiktok { color: #000000 !important; text-shadow: none; }
 
         body.profile-mode {
-            height: 100%; width: 100%; overflow-x: hidden; overflow-y: auto; 
+            height: 100%; width: 100%; overflow-x: hidden !important; overflow-y: auto !important; 
             font-family: 'Cairo', sans-serif; color: var(--text-color); background: var(--bg-gradient);
             transition: background 0.8s, color 0.6s; margin:0; padding:0;
-            -ms-overflow-style: none; scrollbar-width: none;
         }
-        body.profile-mode::-webkit-scrollbar { display: none; }
 
         #profileView * { box-sizing: border-box; }
+        #profileView::-webkit-scrollbar, body.profile-mode::-webkit-scrollbar { display: none; }
+        
+        .welcome-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; z-index: 2000; background: transparent; pointer-events: none; }
+        .welcome-text { font-family: 'El Messiri', sans-serif; font-size: 3.2rem; font-weight: 700; color: #ffffff; opacity: 0; transform: scale(0.9); filter: blur(10px); animation: welcomeAnim 2.8s forwards; text-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        @keyframes welcomeAnim { 0% { opacity: 0; transform: scale(0.8); filter: blur(15px); } 30% { opacity: 1; transform: scale(1); filter: blur(0); } 75% { opacity: 1; transform: scale(1); filter: blur(0); } 100% { opacity: 0; transform: scale(1.05); filter: blur(10px); visibility: hidden; } }
 
         .container { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; min-height: 100vh; padding: 20px; text-align: center; padding-top: 10vh; padding-bottom: 50px; }
 
-        .settings-icon { position: fixed; top: 20px; left: 20px; color: var(--text-color); background: var(--btn-bg); backdrop-filter: blur(10px); border: 1px solid var(--border-color); width: 34px; height: 34px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; z-index: 1005; box-shadow: 0 4px 15px var(--shadow-color); transition: transform 0.3s ease; }
+        .settings-icon { position: fixed; top: 20px; left: 20px; color: var(--text-color); background: var(--btn-bg); backdrop-filter: blur(10px); border: 1px solid var(--border-color); width: 34px; height: 34px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; z-index: 1005; opacity: 0; box-shadow: 0 4px 15px var(--shadow-color); animation: popGlass 0.8s 2.4s forwards; transition: transform 0.3s ease; }
         .settings-icon:hover { transform: translateY(-2px) scale(1.05); }
         .settings-icon .line { width: 16px; height: 2px; background-color: var(--text-color); border-radius: 2px; transition: transform 0.3s, opacity 0.3s; }
         .settings-icon.rotate .line:nth-child(1) { transform: translateY(6px) rotate(45deg); }
@@ -208,61 +438,60 @@
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); z-index: 999; opacity: 0; visibility: hidden; transition: opacity 0.4s; }
         .overlay.active { opacity: 1; visibility: visible; }
 
-        .settings-panel { 
-            position: fixed; top: env(safe-area-inset-top, 20px); left: 20px; 
-            width: calc(100% - 40px); max-width: 250px; background: var(--panel-bg); 
-            backdrop-filter: blur(25px); z-index: 1000; box-shadow: 0 10px 40px var(--shadow-color); 
-            padding: 65px 20px 25px 20px; border-radius: 25px; border: 1px solid var(--border-color); 
-            direction: rtl; transform-origin: top left; transform: scale(0.9); opacity: 0; visibility: hidden; transition: all 0.5s; 
-        }
+        .settings-panel { position: fixed; top: 20px; left: 20px; width: 250px; background: var(--panel-bg); backdrop-filter: blur(25px); z-index: 1000; box-shadow: 0 10px 40px var(--shadow-color); padding: 65px 20px 25px 20px; border-radius: 25px; border: 1px solid var(--border-color); direction: rtl; transform-origin: top left; transform: scale(0.9); opacity: 0; visibility: hidden; transition: all 0.5s; }
         .settings-panel.active { transform: scale(1); opacity: 1; visibility: visible; }
 
         .create-site-btn {
-            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(10px);
-            color: var(--text-color); border: 1px solid var(--border-color);
-            padding: 8px 12px; border-radius: 12px; cursor: pointer;
-            font-family: 'Cairo', sans-serif; font-weight: 600; font-size: 0.65rem;
-            width: 100%; margin: 0; transition: all 0.4s ease;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 600;
+            font-size: 0.65rem;
+            width: 100%;
+            margin: 0;
+            transition: all 0.4s ease;
             display: flex; justify-content: center; align-items: center; gap: 6px; box-shadow: 0 4px 15px var(--shadow-color);
         }
         .create-site-btn:hover { background: rgba(255, 255, 255, 0.15); transform: translateY(-2px); box-shadow: 0 6px 20px var(--shadow-color); }
 
         .settings-copyright { font-family: 'Cairo', sans-serif; font-size: 6px; color: #8e8e8e; letter-spacing: 0.5px; text-align: center; margin-top: 15px; }
 
-        .profile-pic { width: 90px; height: 90px; border-radius: 50%; background-size: cover; background-position: center; border: 3px solid var(--border-color); box-shadow: 0 10px 25px var(--shadow-color); margin-bottom: 12px; animation: profileReveal 0.8s 0.3s forwards; opacity: 0; transform: scale(0.9); }
-        @keyframes profileReveal { to { opacity: 1; transform: scale(1); } }
+        .profile-pic { width: 90px; height: 90px; border-radius: 50%; background-size: cover; background-position: center; border: 3px solid var(--border-color); box-shadow: 0 10px 25px var(--shadow-color); margin-bottom: 12px; opacity: 0; animation: popGlass 0.8s 2.5s forwards, gentlePulse 5s ease-in-out 3.3s infinite; }
+        @keyframes gentlePulse { 0%, 100% { transform: scale(1); box-shadow: 0 10px 25px var(--shadow-color); } 50% { transform: scale(1.03); box-shadow: 0 18px 35px var(--shadow-color); } }
 
-        .header-name-wrapper { display: flex; align-items: center; justify-content: center; margin-bottom: 20px; animation: nameReveal 0.8s 0.5s forwards; opacity: 0; transform: translateY(15px); direction: ltr; gap: 6px; }
-        @keyframes nameReveal { to { opacity: 1; transform: translateY(0); } }
+        .header-name-wrapper { display: flex; align-items: center; justify-content: center; margin-bottom: 20px; opacity: 0; transform: translateY(15px); animation: wrapperSlideUp 1.2s 2.7s forwards; direction: ltr; gap: 6px; }
+        @keyframes wrapperSlideUp { to { opacity: 1; transform: translateY(0); } }
         .header-name { font-family: 'Dancing Script', cursive; font-size: 1.9rem; color: #B8860B; }
 
-        .main-content { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; animation: contentReveal 0.8s 0.7s forwards; opacity: 0; margin-bottom: 60px; }
-        @keyframes contentReveal { to { opacity: 1; } }
+        .main-content { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; opacity: 0; animation: fadeInAll 0.8s 2.4s forwards; margin-bottom: 60px; }
+        @keyframes fadeInAll { to { opacity: 1; } }
 
         .links-container { display: flex; flex-direction: column; gap: 12px; width: 100%; }
         .btn-wrapper { width: 100%; display: flex; flex-direction: column; align-items: center; border-radius: 18px; }
 
-        .btn { background: var(--btn-bg); backdrop-filter: blur(10px); color: var(--text-color); padding: 14px; border-radius: 18px; text-decoration: none; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 12px; border: 1px solid var(--border-color); width: 100%; box-shadow: 0 4px 15px var(--shadow-color); transition: transform 0.6s, box-shadow 0.6s; }
+        .btn { background: var(--btn-bg); backdrop-filter: blur(10px); color: var(--text-color); padding: 14px; border-radius: 18px; text-decoration: none; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 12px; border: 1px solid var(--border-color); opacity: 0; width: 100%; box-shadow: 0 4px 15px var(--shadow-color); transition: transform 0.6s, box-shadow 0.6s; }
         .btn:hover { transform: translateY(-5px) scale(1.02); box-shadow: 0 10px 28px var(--shadow-color); }
         .btn i { filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.6)); transition: transform 0.6s; }
         .btn:hover i { transform: scale(1.18); }
         
-        /* حركة كلاسيكية للأزرار عند الظهور */
-        .btn-wrapper:nth-child(1) .btn { animation: popGlass 0.6s 0.9s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(2) .btn { animation: popGlass 0.6s 1.0s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(3) .btn { animation: popGlass 0.6s 1.1s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(4) .btn { animation: popGlass 0.6s 1.2s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(5) .btn { animation: popGlass 0.6s 1.3s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(6) .btn { animation: popGlass 0.6s 1.4s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(7) .btn { animation: popGlass 0.6s 1.5s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(8) .btn { animation: popGlass 0.6s 1.6s forwards; opacity: 0; }
-        .btn-wrapper:nth-child(9) .btn { animation: popGlass 0.6s 1.7s forwards; opacity: 0; }
+        .main-content .btn-wrapper:nth-child(1) .btn { animation: popGlass 0.8s 2.8s forwards; }
+        .main-content .btn-wrapper:nth-child(2) .btn { animation: popGlass 0.8s 2.95s forwards; }
+        .main-content .btn-wrapper:nth-child(3) .btn { animation: popGlass 0.8s 3.1s forwards; }
+        .main-content .btn-wrapper:nth-child(4) .btn { animation: popGlass 0.8s 3.25s forwards; }
+        .main-content .btn-wrapper:nth-child(5) .btn { animation: popGlass 0.8s 3.4s forwards; }
+        .main-content .btn-wrapper:nth-child(n+6) .btn { animation: popGlass 0.8s 3.5s forwards; }
         @keyframes popGlass { 0% { opacity: 0; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
 
         .fa-tiktok { color: #ffffff; text-shadow: -1.5px -1.5px 0 #25F4EE, 1.5px 1.5px 0 #FE2C55; }
     </style>
 </head>
 <body>
+    <noscript><div style="padding:20px;text-align:center;font-family:Cairo;background:#fff3cd;color:#856404">يرجى تفعيل JavaScript لعرض الصفحة بشكل صحيح</div></noscript>
 
     <div id="dashboardView" style="display: none; width: 100%;">
         <div class="dash-box">
@@ -303,24 +532,74 @@
                     <div class="section-title"><i class="fas fa-link"></i> روابط حساباتك (اختياري)</div>
                     <p style="font-size: 0.8rem; color: #718096; margin-top: -10px; margin-bottom: 15px;">الحقل الذي تتركه فارغاً لن يظهر في صفحتك.</p>
                     
-                    <div class="dash-group"><label><i class="fab fa-facebook" style="color:#1877F2; margin-left: 5px;"></i> فيسبوك</label><input type="url" id="inputFb" placeholder="https://facebook.com/..."></div>
-                    <div class="dash-group"><label><i class="fab fa-instagram" style="color:#E4405F; margin-left: 5px;"></i> انستجرام</label><input type="url" id="inputIg" placeholder="https://instagram.com/..."></div>
-                    <div class="dash-group"><label><i class="fab fa-tiktok" style="color:#000; margin-left: 5px;"></i> تيك توك</label><input type="url" id="inputTk" placeholder="https://tiktok.com/@..."></div>
-                    <div class="dash-group"><label><i class="fab fa-snapchat" style="color:#FFFC00; text-shadow: 0 0 2px rgba(0,0,0,0.5); margin-left: 5px;"></i> سناب شات</label><input type="url" id="inputSc" placeholder="https://snapchat.com/add/..."></div>
-                    <div class="dash-group"><label><i class="fa-brands fa-x-twitter" style="color:#000; margin-left: 5px;"></i> إكس (تويتر)</label><input type="url" id="inputX" placeholder="https://x.com/..."></div>
-                    <div class="dash-group"><label><i class="fa-brands fa-threads" style="color:#000; margin-left: 5px;"></i> ثريدز</label><input type="url" id="inputTh" placeholder="https://threads.net/@..."></div>
-                    <div class="dash-group"><label><i class="fab fa-telegram" style="color:#24A1DE; margin-left: 5px;"></i> تليجرام</label><input type="url" id="inputTg" placeholder="https://t.me/..."></div>
-                    <div class="dash-group"><label><i class="fab fa-whatsapp" style="color:#25D366; margin-left: 5px;"></i> واتساب</label><input type="url" id="inputWa" placeholder="https://wa.me/201xxxxxxxxx"></div>
-                    <div class="dash-group"><label><i class="fas fa-envelope" style="color:#EA4335; margin-left: 5px;"></i> البريد الإلكتروني</label><input type="email" id="inputEmail" placeholder="example@gmail.com"></div>
+                    <div class="dash-group">
+                        <label for="inputFb"><i class="fab fa-facebook" style="color:#1877F2; margin-left: 5px;"></i> فيسبوك</label>
+                        </label>
+	                        <input type="url" id="inputFb" placeholder="https://facebook.com/...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputIg"><i class="fab fa-instagram" style="color:#E4405F; margin-left: 5px;"></i> انستجرام</label>
+                        </label>
+	                        <input type="url" id="inputIg" placeholder="https://instagram.com/...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputTk"><i class="fab fa-tiktok" style="color:#000; margin-left: 5px;"></i> تيك توك</label>
+                        </label>
+	                        <input type="url" id="inputTk" placeholder="https://tiktok.com/@...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputSc"><i class="fab fa-snapchat" style="color:#FFFC00; text-shadow: 0 0 2px rgba(0,0,0,0.5); margin-left: 5px;"></i> سناب شات</label>
+                        </label>
+	                        <input type="url" id="inputSc" placeholder="https://snapchat.com/add/...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputX"><i class="fa-brands fa-x-twitter" style="color:#000; margin-left: 5px;"></i> إكس (تويتر)</label>
+                        </label>
+	                        <input type="url" id="inputX" placeholder="https://x.com/...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputTh"><i class="fa-brands fa-threads" style="color:#000; margin-left: 5px;"></i> ثريدز</label>
+                        </label>
+	                        <input type="url" id="inputTh" placeholder="https://threads.net/@...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputTg"><i class="fab fa-telegram" style="color:#24A1DE; margin-left: 5px;"></i> تليجرام</label>
+                        </label>
+	                        <input type="url" id="inputTg" placeholder="https://t.me/...">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputWa"><i class="fab fa-whatsapp" style="color:#25D366; margin-left: 5px;"></i> واتساب</label>
+                        </label>
+	                        <input type="url" id="inputWa" placeholder="https://wa.me/201xxxxxxxxx">
+                    </div>
+                    <div class="dash-group">
+                        <label for="inputEmail"><i class="fas fa-envelope" style="color:#EA4335; margin-left: 5px;"></i> البريد الإلكتروني (الإيميل)</label>
+                        </label>
+	                        <input type="email" id="inputEmail" placeholder="example@gmail.com">
+                    </div>
                 </div>
 
                 <div class="features-container">
-                    <div class="feature-box"><i class="fas fa-gift" style="color: #10b981; background: #d1fae5;"></i><span>مجاني 100%</span><p>لا رسوم خفية</p></div>
-                    <div class="feature-box"><i class="fas fa-bolt" style="color: #f59e0b; background: #fef3c7;"></i><span>سريع جداً</span><p>استجابة فورية</p></div>
-                    <div class="feature-box"><i class="fas fa-ban" style="color: #ef4444; background: #fee2e2;"></i><span>لا إعلانات</span><p>تجربة نقية</p></div>
+                    <div class="feature-box">
+                        <i class="fas fa-gift" style="color: #10b981; background: #d1fae5;"></i>
+                        <span>مجاني 100%</span>
+                        <p>لا رسوم خفية</p>
+                    </div>
+                    <div class="feature-box">
+                        <i class="fas fa-bolt" style="color: #f59e0b; background: #fef3c7;"></i>
+                        <span>سريع جداً</span>
+                        <p>استجابة فورية</p>
+                    </div>
+                    <div class="feature-box">
+                        <i class="fas fa-ban" style="color: #ef4444; background: #fee2e2;"></i>
+                        <span>لا إعلانات</span>
+                        <p>تجربة نقية</p>
+                    </div>
                 </div>
 
-                <button class="dash-btn" id="createBtn" onclick="startGeneration()"><i class="fas fa-magic"></i> إنشاء موقعي الآن</button>
+                <button class="dash-btn" id="createBtn" onclick="startGeneration()">
+                    <i class="fas fa-magic"></i> إنشاء موقعي الآن
+                </button>
 
                 <div class="dash-result" id="resultArea">
                     <h4><i class="fas fa-check-circle"></i> تم إنشاء صفحتك بنجاح!</h4>
@@ -328,6 +607,7 @@
                     <input type="text" id="resultUrl" readonly>
                     <button class="action-btn" onclick="copyResult()"><i class="fas fa-copy"></i> نسخ الرابط</button>
                     <button class="action-btn secondary" onclick="openResult()"><i class="fas fa-external-link-alt"></i> معاينة صفحتي</button>
+                    
                     <div style="margin-top: 15px; font-size: 0.85rem; color: #1f2937; background: #e5e7eb; padding: 12px; border-radius: 8px; border: 1px dashed #9ca3af;">
                         <strong><i class="fas fa-lightbulb" style="color: #f59e0b;"></i> نصيحة احترافية:</strong> لاختصار هذا الرابط الطويل، ننصحك باستخدام تطبيق <strong>One URL</strong>، فهو احترافي وصغير الحجم جداً!
                     </div>
@@ -335,7 +615,9 @@
 
                 <div class="dash-footer">
                     <p style="font-size: 0.8rem; color: #4a5568; margin-bottom: 5px; font-weight: 700;">لطلب إضافة المزيد من المواقع أرسل رسالة.</p>
-                    <a href="mailto:qwrtreu1245@gmail.com" class="contact-email" title="إرسال رسالة إلينا"><i class="fas fa-envelope"></i></a>
+                    <a href="mailto:qwrtreu1245@gmail.com" class="contact-email" title="إرسال رسالة إلينا">
+                        <i class="fas fa-envelope"></i>
+                    </a>
                     <div class="dash-copyright">جميع الحقوق محفوظة للمطور أحمد غنيم</div>
                 </div>
 
@@ -344,133 +626,121 @@
     </div>
 
     <div id="profileView" style="display: none;">
+        <div class="welcome-screen">
+            <div class="welcome-text" id="welcome-msg">مرحباً</div>
+        </div>
+
         <div class="settings-icon" id="settingsBtn">
-            <span class="line"></span><span class="line"></span><span class="line"></span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"></span>
         </div>
         <div class="overlay" id="overlay"></div>
+
         <div class="settings-panel" id="settingsPanel">
-            <button class="create-site-btn" onclick="goToDashboard()"><i class="fas fa-magic"></i> صمم موقعك بضغطة زر</button>
+            <button class="create-site-btn" onclick="goToDashboard()">
+                <i class="fas fa-magic"></i> صمم موقعك بضغطة زر            
+            </button>
             <div class="settings-copyright">جميع الحقوق محفوظة للمطور أحمد غنيم</div>
         </div>
+
         <div class="container">
             <div class="profile-pic" id="profile-pic-div"></div>
-            <div class="header-name-wrapper"><div class="header-name" id="dynamicName"></div></div>
-            <div class="main-content"><div class="links-container" id="dynamicLinks"></div></div>
+            <div class="header-name-wrapper">
+                <div class="header-name" id="dynamicName">Ahmed</div>
+            </div>
+            <div class="main-content">
+                <div class="links-container" id="dynamicLinks"></div>
+            </div>
         </div>
     </div>
 
     <script>
-        // ========== ضغط وفك ضغط البيانات ==========
-        function encodeData(data) {
-            try {
-                const json = JSON.stringify(data);
-                // استخدام btoa مع ترميز UTF-8 آمن
-                const encoded = btoa(unescape(encodeURIComponent(json)));
-                // جعلها آمنة للرابط
-                return encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            } catch(e) { return ''; }
-        }
-
-        function decodeData(str) {
-            try {
-                let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-                while (base64.length % 4) base64 += '=';
-                const json = decodeURIComponent(escape(atob(base64)));
-                return JSON.parse(json);
-            } catch(e) { return null; }
-        }
-
-        // ========== دوال الأمان المشتركة ==========
-        function sanitizeUrl(url) {
-            if (!url) return '';
-            url = url.trim();
-            if (/[\r\n]/.test(url)) return '';
-            if (/^(https?:\/\/|mailto:)/i.test(url)) return url;
-            if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(\/|$)/.test(url)) return 'https://' + url;
-            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) return 'mailto:' + url;
-            return '';
-        }
-
-        function createSafeLink(rawUrl, iconClass, colorStyle, text) {
-            if (!rawUrl) return;
-            const safeUrl = sanitizeUrl(rawUrl);
-            if (!safeUrl) return;
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'btn-wrapper';
-            const a = document.createElement('a');
-            a.href = safeUrl;
-            a.className = 'btn';
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            const i = document.createElement('i');
-            i.className = iconClass;
-            if (colorStyle) i.setAttribute('style', colorStyle);
-            a.appendChild(i);
-            a.appendChild(document.createTextNode(' ' + text));
-            wrapper.appendChild(a);
-            document.getElementById('dynamicLinks').appendChild(wrapper);
-        }
-
-        // ========== تحديد وضع العرض ==========
         const urlParams = new URLSearchParams(window.location.search);
-        const encodedData = urlParams.get('d');
-        let profileData = null;
+        const profileName = urlParams.get('n');
 
-        if (encodedData) {
-            profileData = decodeData(encodedData);
-        }
-
-        if (profileData && profileData.n) {
-            // وضع صفحة العميل
+        if (profileName) {
             document.body.classList.add('profile-mode');
             document.getElementById('dashboardView').style.display = 'none';
             document.getElementById('profileView').style.display = 'block';
 
-            if (profileData.c && profileData.c !== 'black') {
-                document.body.classList.add('theme-' + profileData.c);
+            const selectedTheme = urlParams.get('c');
+            const allowedThemes = ['blue', 'white', 'offwhite', 'peach'];
+            if (selectedTheme && allowedThemes.includes(selectedTheme)) {
+                document.body.classList.add('theme-' + selectedTheme);
             }
 
-            document.getElementById('dynamicName').innerText = profileData.n;
-            document.title = profileData.n;
+            document.getElementById('dynamicName').innerText = profileName;
+            document.title = profileName;
 
-            const imgUrl = profileData.i;
+            const imgUrl = urlParams.get('i');
             const profilePicDiv = document.getElementById('profile-pic-div');
-            if (imgUrl) {
-                profilePicDiv.style.backgroundImage = `url('${imgUrl}')`;
+            
+            // إذا كان هناك رابط صورة آمن، ضعها
+            if (imgUrl && /^https?:\/\//i.test(imgUrl)) {
+                const safeImg = imgUrl.replace(/"/g, '%22');
+                profilePicDiv.style.backgroundImage = `url("${safeImg}")`;
             } else {
+                // إذا لم يكن هناك رابط، قم بإخفاء إطار الصورة بالكامل
                 profilePicDiv.style.display = 'none';
             }
 
-            // بناء الروابط
-            createSafeLink(profileData.fb, 'fab fa-facebook', 'color: #1877F2;', 'Facebook');
-            createSafeLink(profileData.ig, 'fab fa-instagram', 'color: #E4405F;', 'Instagram');
-            createSafeLink(profileData.tk, 'fab fa-tiktok', '', 'TikTok');
-            createSafeLink(profileData.sc, 'fab fa-snapchat', 'color: #FFFC00; text-shadow: 0px 0px 2px rgba(0,0,0,0.8);', 'Snapchat');
-            createSafeLink(profileData.x, 'fa-brands fa-x-twitter', '', 'X');
-            createSafeLink(profileData.th, 'fa-brands fa-threads', '', 'Threads');
-            createSafeLink(profileData.tg, 'fab fa-telegram', 'color: #24A1DE;', 'Telegram');
-            createSafeLink(profileData.wa, 'fab fa-whatsapp', 'color: #25D366;', 'WhatsApp');
-            if (profileData.em) {
-                createSafeLink(profileData.em, 'fas fa-envelope', 'color: #EA4335;', 'Email');
+            const linksContainer = document.getElementById('dynamicLinks');
+            
+            function createLink(url, iconClass, colorStyle, text) {
+                if (!url) return;
+                try {
+                    const safeUrl = url.trim();
+                    // السماح فقط بروابط آمنة
+                    if (!/^(https?:\/\/|mailto:)/i.test(safeUrl)) return;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'btn-wrapper';
+                    const a = document.createElement('a');
+                    a.href = safeUrl;
+                    a.className = 'btn';
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    const i = document.createElement('i');
+                    i.className = iconClass;
+                    if (colorStyle) i.style.cssText = colorStyle;
+                    a.appendChild(i);
+                    a.appendChild(document.createTextNode(' ' + text));
+                    wrapper.appendChild(a);
+                    linksContainer.appendChild(wrapper);
+                } catch(e) {}
+            }
+
+            // تحميل الروابط وإظهار الأزرار
+            createLink(urlParams.get('fb'), 'fab fa-facebook', 'color: #1877F2;', 'Facebook');
+            createLink(urlParams.get('ig'), 'fab fa-instagram', 'color: #E4405F;', 'Instagram');
+            createLink(urlParams.get('tk'), 'fab fa-tiktok', '', 'TikTok');
+            createLink(urlParams.get('sc'), 'fab fa-snapchat', 'color: #FFFC00; text-shadow: 0px 0px 2px rgba(0,0,0,0.8);', 'Snapchat');
+            createLink(urlParams.get('x'), 'fa-brands fa-x-twitter', '', 'X');
+            createLink(urlParams.get('th'), 'fa-brands fa-threads', '', 'Threads');
+            createLink(urlParams.get('tg'), 'fab fa-telegram', 'color: #24A1DE;', 'Telegram');
+            createLink(urlParams.get('wa'), 'fab fa-whatsapp', 'color: #25D366;', 'WhatsApp');
+            
+            const emUrl = urlParams.get('em');
+            if (emUrl) {
+                const mail = (emUrl.includes('@') && !emUrl.startsWith('mailto:')) ? 'mailto:' + emUrl : emUrl;
+                createLink(mail, 'fas fa-envelope', 'color: #EA4335;', 'Email');
             }
 
             initSimpleSettings();
 
         } else {
-            // وضع لوحة التحكم
             document.body.classList.add('dashboard-mode');
             document.getElementById('dashboardView').style.display = 'flex';
             document.getElementById('profileView').style.display = 'none';
         }
 
-        // ========== لوحة التحكم ==========
         function startGeneration() {
             const n = document.getElementById('inputName').value.trim();
             if (!n) { alert("أرجوك اكتب اسمك أولاً!"); return; }
 
             const btn = document.getElementById('createBtn');
             btn.disabled = true;
+            
             let count = 3;
             btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> جاري التجهيز ${count}...`;
 
@@ -491,34 +761,44 @@
         }
 
         function generateLink() {
-            const data = {};
-            data.n = document.getElementById('inputName').value.trim();
-            const theme = document.getElementById('inputTheme').value;
-            if (theme !== 'black') data.c = theme;
+            const n = document.getElementById('inputName').value.trim();
+            const params = new URLSearchParams();
+            params.set('n', n);
 
+            const theme = document.getElementById('inputTheme').value;
+            if (theme !== 'black') { params.set('c', theme); }
+
+            // تم إضافة اختصار الواتساب (wa)
             const fields = ['i', 'fb', 'ig', 'tk', 'sc', 'x', 'th', 'tg', 'wa', 'em'];
             const ids = ['inputImage', 'inputFb', 'inputIg', 'inputTk', 'inputSc', 'inputX', 'inputTh', 'inputTg', 'inputWa', 'inputEmail'];
 
             fields.forEach((field, index) => {
                 const val = document.getElementById(ids[index]).value.trim();
-                if (val) data[field] = val;
+                if (val) params.set(field, val);
             });
 
-            const encoded = encodeData(data);
             const baseUrl = window.location.href.split('?')[0];
-            document.getElementById('resultUrl').value = baseUrl + '?d=' + encoded;
+            document.getElementById('resultUrl').value = baseUrl + '?' + params.toString();
             document.getElementById('resultArea').style.display = 'block';
         }
 
-        async function copyResult() {
-            try {
-                await navigator.clipboard.writeText(document.getElementById('resultUrl').value);
-                alert("تم نسخ الرابط السحري بنجاح!");
-            } catch (err) {
-                const input = document.getElementById('resultUrl');
-                input.select();
-                document.execCommand('copy');
-                alert("تم النسخ (قد تحتاج للصق يدوي في بعض المتصفحات).");
+        function copyResult() {
+            const urlInput = document.getElementById('resultUrl');
+            const url = urlInput.value;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url).then(() => {
+                    alert("تم نسخ الرابط بنجاح!");
+                }).catch(() => {
+                    fallbackCopy();
+                });
+            } else {
+                fallbackCopy();
+            }
+            function fallbackCopy() {
+                urlInput.select();
+                urlInput.setSelectionRange(0, 99999);
+                document.execCommand("copy");
+                alert("تم نسخ الرابط بنجاح!");
             }
         }
 
@@ -530,17 +810,21 @@
             const settingsBtn = document.getElementById('settingsBtn');
             const settingsPanel = document.getElementById('settingsPanel');
             const overlay = document.getElementById('overlay');
+
             const closePanel = () => {
                 settingsBtn.classList.remove('rotate'); 
                 settingsPanel.classList.remove('active'); 
                 overlay.classList.remove('active'); 
             };
+
             settingsBtn.onclick = () => { 
                 if(!settingsPanel.classList.contains('active')) {
                     settingsBtn.classList.add('rotate'); 
                     settingsPanel.classList.add('active'); 
                     overlay.classList.add('active'); 
-                } else { closePanel(); }
+                } else {
+                    closePanel();
+                }
             };
             overlay.onclick = closePanel;
         }
